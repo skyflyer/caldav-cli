@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/emersion/go-ical"
@@ -12,13 +13,14 @@ import (
 )
 
 type EventData struct {
-	UID         string `json:"uid"`
-	Summary     string `json:"summary"`
-	Description string `json:"description,omitempty"`
-	Start       string `json:"start"`
-	End         string `json:"end"`
-	Duration    string `json:"duration"`
-	Location    string `json:"location"`
+	UID         string    `json:"uid"`
+	Summary     string    `json:"summary"`
+	Description string    `json:"description,omitempty"`
+	Start       string    `json:"start"`
+	End         string    `json:"end"`
+	Duration    string    `json:"duration"`
+	Location    string    `json:"location"`
+	startTime   time.Time // parsed DTSTART, used for sorting
 }
 
 func ExtractEvents(objects []caldav.CalendarObject) []EventData {
@@ -29,6 +31,9 @@ func ExtractEvents(objects []caldav.CalendarObject) []EventData {
 		}
 		for _, child := range obj.Data.Children {
 			if child.Name != "VEVENT" {
+				continue
+			}
+			if child.Props.Get("RECURRENCE-ID") != nil {
 				continue
 			}
 			ev := EventData{}
@@ -47,6 +52,7 @@ func ExtractEvents(objects []caldav.CalendarObject) []EventData {
 			if prop := child.Props.Get("DTSTART"); prop != nil {
 				ev.Start = prop.Value
 				startTime, _ = parseICal(prop)
+				ev.startTime = startTime
 			}
 			if prop := child.Props.Get("DTEND"); prop != nil {
 				ev.End = prop.Value
@@ -59,6 +65,9 @@ func ExtractEvents(objects []caldav.CalendarObject) []EventData {
 			events = append(events, ev)
 		}
 	}
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].startTime.Before(events[j].startTime)
+	})
 	return events
 }
 
